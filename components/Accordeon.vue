@@ -21,17 +21,39 @@ export default {
   mounted(){
     this.headerHeight = this.$refs.header.offsetHeight
     this.borderWidth = parseInt(getComputedStyle(this.$refs.dd,null).getPropertyValue('border-width'), 10)
+    this.paddingSize = parseInt(getComputedStyle(this.$refs.content,null).getPropertyValue('padding-top'), 10) +
+      parseInt(getComputedStyle(this.$refs.content,null).getPropertyValue('padding-bottom'), 10)
     this.fullHeight = this.headerHeight + this.borderWidth * 2
     this.resizeObserver = new ResizeObserver(entries => {
       entries.forEach(({ target }) => {
-        console.log('update from resize observer', target.offsetHeight)
-        console.log(getComputedStyle(target).getPropertyValue("max-height"))
-        this.contentHeight = target.offsetHeight
+        if(!this.once){
+          this.once = true
+          return
+        }
+        if(this.blocked){
+          return
+        }
+        this.blocked = true
+        //TODO как вариант можно считать высоту контента с помощью подсчета всех отступов детей и их высоты
+        this.__blockTimeout = setTimeout(() => {
+          this.blocked = false
+        }, this.transitionTime)
+        this.contentHeight = Array.from(target.children).reduce((acc, item) => {
+          const localHeight = getComputedStyle(item).getPropertyValue('--height')
+          if(localHeight && parseInt(localHeight, 10) !== this.fullHeight){
+            console.log(item, parseInt(localHeight, 10))
+            return acc + parseInt(localHeight, 10)
+          } else {
+            console.log(item, item.offsetHeight)
+            return acc + item.offsetHeight
+          }
+        }, 0)
+        console.log('contentHeight', this.contentHeight)
         this.calculateFullHeight()
       })
     })
 
-    this.resizeObserver.observe(this.$refs.content)
+
   },
   data(){
     return {
@@ -40,7 +62,10 @@ export default {
       fullHeight: null,
       transitionTime: 300,
       borderWidth: null,
-      resizeObserver: null
+      paddingSize: null,
+      resizeObserver: null,
+      blocked: false,
+      once: false
     }
   },
   computed:{
@@ -53,23 +78,30 @@ export default {
   },
   methods:{
     calculateFullHeight(){
+      console.log(this.borderWidth, this.paddingSize)
       this.fullHeight = this.headerHeight + this.contentHeight + this.borderWidth * 2
+      console.log('fullHeight',this.fullHeight)
     },
     onSummaryClick(){
       const isOpen = this.$refs.dd.hasAttribute('open')
       this.toggle(isOpen)
     },
     toggle(isOpen){
+      clearTimeout(this.__blockTimeout)
+      this.blocked = false
       if (isOpen) {
         this.contentHeight = null
         this.__timeoutId = setTimeout(() => {
           this.$refs.dd.removeAttribute('open')
         }, this.transitionTime)
       } else {
-
         this.__timeoutId && clearTimeout(this.__timeoutId)
         this.contentHeight = this.$refs.content.offsetHeight
         this.$refs.dd.setAttribute('open', '')
+        if(!this.once)
+        setTimeout(() => {
+          this.resizeObserver.observe(this.$refs.content)
+        }, this.transitionTime)
       }
       this.calculateFullHeight()
     }
